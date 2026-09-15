@@ -1,16 +1,18 @@
 import io
+import sys
 import wave
 from email.parser import BytesParser
 from email.policy import default
 
 import numpy as np
+import pytest
 
 from dikte.audio import Rechunker, Resampler
 from dikte.engines.base import Segment
 from dikte.engines.cloud import _language_fields
 from dikte.engines.http import encode_multipart, wav_bytes
 from dikte.engines.repair import uncovered_speech
-from dikte.inserter import _utf16_chunks
+
 from dikte.levels import SAMPLE_RATE
 
 RNG = np.random.default_rng(11)
@@ -82,7 +84,10 @@ def test_resampler_keeps_frequency_and_length():
     assert abs(peak_hz - 440) < 5
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS text insertion")
 def test_utf16_chunks_never_split_surrogates():
+    from dikte.platform.macos.inserter import _utf16_chunks
+
     text = "Şimdi 😀" * 6
     chunks = _utf16_chunks(text, 20)
     assert "".join(chunks) == text

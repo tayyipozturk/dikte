@@ -35,7 +35,7 @@ _BARS = 8
 _BOTTOM_OFFSET = 90.0
 
 
-class Hud:
+class MacHud:
     def __init__(self) -> None:
         rect = NSMakeRect(0, 0, _WIDTH, _HEIGHT)
         panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -80,8 +80,9 @@ class Hud:
             self._bars.append(bar)
         self._panel = panel
 
-    def show(self, text: str, color: NSColor, level: float | None) -> None:
-        """level: 0..1 for the meter, or None to hide the meter."""
+    def show(self, text: str, kind: str, level: float | None) -> None:
+        """kind: "recording" or "transcribing"; level 0..1, or None for no meter."""
+        color = NSColor.systemRedColor() if kind == "recording" else NSColor.systemBlueColor()
         self._label.setStringValue_(text)
         self._dot.layer().setBackgroundColor_(color.CGColor())
         for i, bar in enumerate(self._bars):

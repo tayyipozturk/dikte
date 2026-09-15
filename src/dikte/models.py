@@ -65,6 +65,14 @@ CATALOG: dict[str, ModelInfo] = {
             "Most accurate, about 2x slower",
             "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
         ),
+        ModelInfo(
+            "base-q5_1",
+            "ggml-base-q5_1.bin",
+            f"{_WHISPER}/ggml-base-q5_1.bin",
+            57,
+            "Tiny and fast, much less accurate (slow machines, testing)",
+            "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
+        ),
     )
 }
 

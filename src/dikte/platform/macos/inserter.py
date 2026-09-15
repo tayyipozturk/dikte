@@ -21,9 +21,9 @@ from AppKit import (
 )
 from Foundation import NSData
 
-from .config import Settings
+from ...config import Settings
 from .hotkey import SYNTHETIC_MARKER
-from .paths import BUNDLE_ID
+from ...paths import BUNDLE_ID
 
 log = logging.getLogger(__name__)
 

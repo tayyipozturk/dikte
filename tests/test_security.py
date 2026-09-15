@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -12,7 +13,6 @@ from dikte import models
 from dikte.audio import Resampler
 from dikte.engines import http
 from dikte.engines.whisper_server import WhisperServerEngine
-from dikte.feedback import _applescript_string
 from dikte.levels import SAMPLE_RATE, level_db
 
 
@@ -35,7 +35,10 @@ def test_error_text_is_scrubbed():
     assert http._error_detail(b'{"error": {"message": "Invalid file format"}}') == "Invalid file format"
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS notifications")
 def test_notification_text_has_no_control_characters():
+    from dikte.platform.macos.feedback import _applescript_string
+
     assert "\x00" not in _applescript_string("bad\x00text\nline")
 
 

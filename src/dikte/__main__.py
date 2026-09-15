@@ -1,5 +1,6 @@
-"""Command line. `dikte` (or `dikte run`) starts the menu-bar app.
+"""Command line. `dikte` (or `dikte run`) starts the menu-bar / tray app.
 
+  dikte toggle             start or stop recording in the running app
   dikte download [MODEL]   download a speech model (+ the VAD model)
   dikte transcribe FILE    transcribe an audio file with the current settings
   dikte devices            list microphones
@@ -16,7 +17,7 @@ import wave
 
 import numpy as np
 
-from . import models, paths
+from . import ipc, models, paths
 from .config import LANGUAGES, load_settings, updated
 
 
@@ -95,24 +96,31 @@ def cmd_devices() -> int:
     return 0
 
 
+def cmd_toggle(command: str) -> int:
+    reply = ipc.send(paths.socket_path(), command)
+    if reply is None:
+        print("Dikte is not running (no control socket).", file=sys.stderr)
+        return 1
+    print(reply)
+    return 0 if reply == "ok" else 1
+
+
 def cmd_doctor() -> int:
-    from . import login_item, permissions
     from .engines.whisper_server import find_server_binary
+    from .platform import get_platform
 
     settings, warnings = load_settings()
-    perms = permissions.check()
+    platform = get_platform()
 
     def line(ok: bool, text: str) -> None:
         print(f"{'✓' if ok else '✗'} {text}")
 
-    print("Permissions (they belong to the app that launched this command):")
-    line(perms.microphone == "granted", f"Microphone: {perms.microphone}")
-    line(perms.accessibility, "Accessibility (insert text)")
-    line(perms.input_monitoring, "Input Monitoring (hotkey; may be covered by Accessibility)")
-    line(not permissions.secure_input_enabled(), "Secure Keyboard Entry is off")
+    print(f"Platform: {platform.name}")
+    for ok, text in platform.doctor():
+        line(ok, text)
     print("\nSpeech:")
     server = find_server_binary(settings.whisper_server_path)
-    line(server is not None, f"whisper-server: {server or 'missing (brew install whisper-cpp)'}")
+    line(server is not None, f"whisper-server: {server or 'missing (see the install script)'}")
     model = models.CATALOG[settings.local_model]
     line(models.is_downloaded(model), f"Model {model.filename}")
     line(models.is_downloaded(models.VAD_MODEL), f"VAD model {models.VAD_MODEL.filename}")
@@ -121,18 +129,18 @@ def cmd_doctor() -> int:
     line(not warnings, f"Settings {paths.config_path()}" + (f" ({len(warnings)} warning(s))" if warnings else ""))
     for warning in warnings:
         print(f"    {warning}")
-    line(login_item.launcher_executable() is not None, f"App bundle {login_item.DEFAULT_APP}")
-    line(paths.launcher_conf_path().exists(), f"Launcher config {paths.launcher_conf_path()}")
-    print(f"  Start at login: {'on' if login_item.is_enabled() else 'off'}")
+    line(ipc.send(paths.socket_path(), "ping") == "ok", f"Running app (control socket {paths.socket_path()})")
     print(f"  Logs: {paths.log_dir()}")
     print()
     return cmd_devices()
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="dikte", description="Menu-bar dictation for macOS (Turkish + English).")
+    parser = argparse.ArgumentParser(prog="dikte", description="Dictation for macOS and Ubuntu (Turkish + English).")
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("run", help="start the menu-bar app (default)")
+    sub.add_parser("run", help="start the menu-bar / tray app (default)")
+    sub.add_parser("toggle", help="start or stop recording in the running app")
+    sub.add_parser("cancel", help="discard the recording in progress")
     download = sub.add_parser("download", help="download a speech model")
     download.add_argument("model", nargs="?", choices=list(models.CATALOG))
     transcribe = sub.add_parser("transcribe", help="transcribe an audio file")
@@ -149,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_transcribe(args.file, args.language)
     if args.command == "devices":
         return cmd_devices()
+    if args.command in ("toggle", "cancel"):
+        return cmd_toggle(args.command)
     if args.command == "doctor":
         return cmd_doctor()
     from .app import run

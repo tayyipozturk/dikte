@@ -12,12 +12,15 @@ log = logging.getLogger(__name__)
 SOUNDS = {"start": "Tink", "stop": "Pop", "cancel": "Bottle", "error": "Basso", "listen": "Morse"}
 
 
-class Sounds:
-    """Call from the main thread."""
+class MacFeedback:
+    """Sounds and notifications. Call play() from the main thread."""
 
     def __init__(self, volume: float = 0.35) -> None:
         self._volume = volume
         self._cache: dict[str, NSSound] = {}
+
+    def notify(self, title: str, message: str) -> None:
+        notify(title, message)
 
     def play(self, name: str) -> None:
         system_name = SOUNDS.get(name)

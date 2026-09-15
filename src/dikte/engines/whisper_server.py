@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .. import paths
 from ..levels import SAMPLE_RATE
 from .base import EngineError, Segment, Transcript
 from .http import post_multipart, wav_bytes
@@ -31,7 +32,11 @@ from .repair import uncovered_speech
 
 log = logging.getLogger(__name__)
 
-_CANDIDATES = ("/opt/homebrew/bin/whisper-server", "/usr/local/bin/whisper-server")
+_CANDIDATES = (
+    "/opt/homebrew/bin/whisper-server",  # macOS (Homebrew)
+    "/usr/local/bin/whisper-server",
+    "/usr/bin/whisper-server",  # Ubuntu 26.04 (apt)
+)
 _LANGUAGE_CODES = {"turkish": "tr", "english": "en"}
 _START_TIMEOUT_S = 60.0
 _MAX_REPAIRS = 2
@@ -41,6 +46,9 @@ _MAX_LOG_BYTES = 5 * 1024 * 1024
 def find_server_binary(configured: str = "") -> str | None:
     if configured:
         return configured if os.access(configured, os.X_OK) else None
+    bundled = paths.whisper_dir() / "whisper-server"  # unpacked by the Linux installer
+    if os.access(bundled, os.X_OK):
+        return str(bundled)
     found = shutil.which("whisper-server")  # PATH is minimal when started by launchd
     if found:
         return found

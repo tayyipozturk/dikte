@@ -7,12 +7,18 @@ requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
     "sounddevice>=0.5",
-    "pyobjc-core>=10.3",
-    "pyobjc-framework-Cocoa>=10.3",
-    "pyobjc-framework-Quartz>=10.3",
-    "pyobjc-framework-ApplicationServices>=10.3",
-    "pyobjc-framework-AVFoundation>=10.3",
+    "pyobjc-core>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-AVFoundation>=10.3; sys_platform == 'darwin'",
 ]
+
+# On Linux the GTK bindings normally come from the system (apt install python3-gi
+# gir1.2-ayatanaappindicator3-0.1) and the venv is created with
+# --system-site-packages; scripts/install-ubuntu.sh does this for you.
+[project.optional-dependencies]
+gtk = ["pygobject>=3.48; sys_platform == 'linux'"]
 
 [project.scripts]
 dikte = "dikte.__main__:main"

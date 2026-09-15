@@ -19,7 +19,10 @@ from typing import Any, Callable
 from . import paths
 
 MODES = ("hold", "toggle", "voice")
-HOTKEYS = ("right_cmd", "right_option", "right_ctrl", "right_shift", "fn")
+# The union of both platforms' keys; each platform offers its own subset in the menu.
+HOTKEYS = ("right_cmd", "right_option", "right_ctrl", "right_shift", "fn", "right_alt", "right_super")
+DEFAULT_HOTKEY = "right_cmd" if paths.IS_MACOS else "right_ctrl"
+PASTE_SHORTCUTS = ("ctrl_v", "ctrl_shift_v", "shift_insert")
 LANGUAGES = ("tr", "auto", "en")
 ENGINES = ("local", "cloud")
 INSERT_METHODS = ("paste", "type")
@@ -42,7 +45,7 @@ DEFAULT_VOCABULARY = ("GitHub", "TypeScript", "JavaScript", "Python", "README", 
 class Settings:
     # Trigger
     mode: str = "hold"  # hold (push-to-talk, double-tap = hands-free) | toggle | voice
-    hotkey: str = "right_cmd"
+    hotkey: str = DEFAULT_HOTKEY
     hold_threshold_ms: int = 200
     double_tap_ms: int = 350
     esc_cancels: bool = True  # Esc discards a recording in progress
@@ -76,6 +79,7 @@ class Settings:
     cloud_api_key_env: str = "OPENAI_API_KEY"
     # Output
     insert_method: str = "paste"
+    paste_shortcut: str = "ctrl_v"  # Linux: terminals need ctrl_shift_v
     paste_guard: bool = True  # app changed while transcribing → copy instead of paste
     restore_clipboard: bool = True
     restore_delay_ms: int = 800
@@ -231,6 +235,7 @@ SPECS: dict[str, Validator] = {
     "cloud_model": _text(100, r"[A-Za-z0-9._:/-]+"),
     "cloud_api_key_env": _text(64, r"[A-Z_][A-Z0-9_]*"),
     "insert_method": _choice(*INSERT_METHODS),
+    "paste_shortcut": _choice(*PASTE_SHORTCUTS),
     "paste_guard": _boolean,
     "restore_clipboard": _boolean,
     "restore_delay_ms": _number(50, 5000, integer=True),

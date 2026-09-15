@@ -453,6 +453,12 @@ class Controller:
         elif name == "cancel":
             self._cancel(now)
             self._detector.reset()
+        elif name == "toggle":  # `dikte toggle`, e.g. from a desktop keyboard shortcut
+            if self._rec is not None:
+                self._finish_now(now)
+            else:
+                self._do(Action.PREPARE, now)
+                self._do(Action.HANDS_FREE, now)
         elif name == "calibrate":
             if self._ensure_stream(now):
                 self._calibration = []

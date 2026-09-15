@@ -6,6 +6,7 @@ is called on the audio thread and must return quickly.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from dataclasses import dataclass
@@ -34,12 +35,24 @@ class InputDevice:
     channels: int
 
 
+_cached_names: tuple[str, ...] = ()
+
+
 def list_input_devices() -> list[InputDevice]:
-    return [
+    global _cached_names
+    devices = [
         InputDevice(i, str(d["name"]), float(d["default_samplerate"]), int(d["max_input_channels"]))
         for i, d in enumerate(sd.query_devices())
         if d["max_input_channels"] > 0
     ]
+    _cached_names = tuple(device.name for device in devices)
+    return devices
+
+
+def cached_input_device_names() -> tuple[str, ...]:
+    """Names from the last scan. Reading them never touches PortAudio, so the UI
+    thread cannot race with the controller re-scanning devices."""
+    return _cached_names
 
 
 def pick_device(devices: list[InputDevice], preferred: str) -> InputDevice | None:
@@ -118,6 +131,8 @@ class Resampler:
 
 class AudioInput:
     def __init__(self) -> None:
+        with contextlib.suppress(Exception):
+            list_input_devices()  # warm the name cache for the menu
         self._stream: sd.InputStream | None = None
         self._device: InputDevice | None = None
         self._consumer: FrameConsumer | None = None

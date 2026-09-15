@@ -7,7 +7,7 @@ import plistlib
 import tempfile
 from pathlib import Path
 
-from . import paths
+from ... import paths
 
 DEFAULT_APP = Path.home() / "Applications" / "Dikte.app"
 
@@ -16,6 +16,17 @@ def launcher_executable() -> Path | None:
     app = Path(os.environ["DIKTE_APP_PATH"]) if os.environ.get("DIKTE_APP_PATH") else DEFAULT_APP
     executable = app / "Contents" / "MacOS" / "Dikte"
     return executable if executable.exists() else None
+
+
+class MacLoginItem:
+    def is_enabled(self) -> bool:
+        return is_enabled()
+
+    def enable(self) -> None:
+        enable()
+
+    def disable(self) -> None:
+        disable()
 
 
 def is_enabled() -> bool:
