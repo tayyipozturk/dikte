@@ -61,7 +61,7 @@ class LinuxRuntime:
             Gtk.main_quit()
 
     def restart(self) -> None:
-        os.execv(sys.executable, [sys.executable, "-m", "dikte"])  # noqa: S606
+        os.execv(sys.executable, [sys.executable, "-m", "dikte", *sys.argv[1:]])  # noqa: S606
 
     def open_path(self, path: Path) -> None:
         try:

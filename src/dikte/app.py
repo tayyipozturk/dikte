@@ -42,7 +42,9 @@ class AppCore:
     def launch(self) -> None:
         self.feedback = self.platform.feedback()
         self.hud = self.platform.hud()
-        self.tray = self.platform.tray(self)
+        # Before the inserter: on Linux this registers the desktop entry, so the
+        # first permission dialog can name the app.
+        self.platform.request_permissions()
         self.inserter = self.platform.inserter()
         self.audio = AudioInput()
         self.transcriber = Transcriber(self.inserter, self._job_finished, self._engine_state)
@@ -51,6 +53,8 @@ class AppCore:
         self.hotkey = self.platform.hotkey(self.settings.hotkey, self.controller.hotkey)
         self.control = ipc.ControlServer(paths.socket_path(), self._on_command)
         self._devices = tuple(self.platform.input_device_names())
+        # Last: rendering the menu reads the hotkey and the other components above.
+        self.tray = self.platform.tray(self)
         self.controller.start()
         self.transcriber.start(self.settings)
         self.control.start()
@@ -58,7 +62,6 @@ class AppCore:
         set_wake_handler = getattr(self.runtime, "set_wake_handler", None)
         if set_wake_handler is not None:
             set_wake_handler(self.wake)
-        self.platform.request_permissions()
         if not self.hotkey.start():
             log.warning("Hotkey could not be registered (permission or desktop restriction)")
         self.tick()

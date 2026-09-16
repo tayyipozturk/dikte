@@ -65,7 +65,7 @@ class MacRuntime:
     def restart(self) -> None:
         if os.environ.get("DIKTE_LAUNCHER"):
             os._exit(RESTART_EXIT_CODE)
-        os.execv(sys.executable, [sys.executable, "-m", "dikte"])  # noqa: S606
+        os.execv(sys.executable, [sys.executable, "-m", "dikte", *sys.argv[1:]])  # noqa: S606
 
     def open_path(self, path: Path) -> None:
         if subprocess.run(["open", str(path)], check=False).returncode != 0:  # noqa: S603,S607

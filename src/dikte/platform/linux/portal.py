@@ -37,6 +37,7 @@ STATE_RELEASED, STATE_PRESSED = 0, 1
 MIME_TYPES = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"]
 _KEY_GAP_MS = 15
 _SELECTION_SETTLE_MS = 80
+_RESPONSE_TIMEOUT_S = 90  # the user may take a while to answer the permission dialog
 
 
 class PortalKeyboard:
@@ -49,6 +50,7 @@ class PortalKeyboard:
         self._sender = ""
         self._session = ""
         self._payload = b""
+        self._transfer_subscription: int | None = None
         self.ready = False
         self.clipboard_enabled = False
         self.error = ""
@@ -64,8 +66,11 @@ class PortalKeyboard:
             self._fail(f"No session bus: {exc.message}")
             return
         self._sender = self._bus.get_unique_name()[1:].replace(".", "_")
-        self._bus.signal_subscribe(BUS_NAME, CLIPBOARD, "SelectionTransfer", OBJECT_PATH, None,
-                                   Gio.DBusSignalFlags.NONE, self._on_selection_transfer)
+        if self._transfer_subscription is None:  # subscribe once, even across retries
+            self._transfer_subscription = self._bus.signal_subscribe(
+                BUS_NAME, CLIPBOARD, "SelectionTransfer", OBJECT_PATH, None,
+                Gio.DBusSignalFlags.NONE, self._on_selection_transfer,
+            )
         options = {"session_handle_token": GLib.Variant("s", f"dikte{os.getpid()}")}
         self._request(REMOTE_DESKTOP, "CreateSession", "(a{sv})", (), options, self._created)
 
@@ -74,6 +79,9 @@ class PortalKeyboard:
             self._fail("The remote-interaction request was dismissed.")
             return
         self._session = results.get("session_handle", "")
+        if not self._session.startswith("/"):
+            self._fail("The portal did not return a session.")
+            return
         options = {
             "types": GLib.Variant("u", DEVICE_KEYBOARD),
             "persist_mode": GLib.Variant("u", PERSIST_UNTIL_REVOKED),
@@ -124,12 +132,12 @@ class PortalKeyboard:
         steps = [(key, STATE_PRESSED) for key in combo] + [(key, STATE_RELEASED) for key in reversed(combo)]
         self._run_steps(steps, after)
 
-    def type_text(self, text: str) -> None:
+    def type_text(self, text: str, after: Callable[[], None] | None = None) -> None:
         steps: list[tuple[int, int]] = []
         for char in text:
             keysym = char_to_keysym(char)
             steps += [(keysym, STATE_PRESSED), (keysym, STATE_RELEASED)]
-        self._run_steps(steps, None)
+        self._run_steps(steps, after)
 
     def _run_steps(self, steps: list[tuple[int, int]], after: Callable[[], None] | None) -> None:
         if not self.ready:
@@ -148,11 +156,11 @@ class PortalKeyboard:
 
         step(0)
 
-    def paste_after_selection(self, combo: Sequence[int]) -> None:
+    def paste_after_selection(self, combo: Sequence[int], after: Callable[[], None] | None = None) -> None:
         """Give the compositor a moment to notice the new clipboard owner."""
 
         def press() -> bool:
-            self.press_combo(combo)
+            self.press_combo(combo, after)
             return False
 
         GLib.timeout_add(_SELECTION_SETTLE_MS, press)
@@ -184,8 +192,8 @@ class PortalKeyboard:
         if self._bus is None:
             return False
         try:
-            self._bus.call(BUS_NAME, OBJECT_PATH, interface, method, params, None,
-                           Gio.DBusCallFlags.NONE, 5000, None, None)
+            self._bus.call_sync(BUS_NAME, OBJECT_PATH, interface, method, params, None,
+                                Gio.DBusCallFlags.NONE, 5000, None)
             return True
         except GLib.Error as exc:
             log.warning("%s.%s failed: %s", interface, method, exc.message)
@@ -199,21 +207,42 @@ class PortalKeyboard:
         options = dict(options, handle_token=GLib.Variant("s", token))
         request_path = f"{OBJECT_PATH}/request/{self._sender}/{token}"
         subscription: list[int] = []
+        handled: list[bool] = [False]
+        timeout_id: list[int] = []
 
         def handler(_connection, _sender, _path, _interface, _signal, signal_params) -> None:  # noqa: ANN001
             response, results = signal_params.unpack()
+            if handled[0]:
+                return
+            handled[0] = True
+            if timeout_id:
+                GLib.source_remove(timeout_id[0])
             if subscription:
                 self._bus.signal_unsubscribe(subscription[0])
             on_response(int(response), results)
+
+        def on_timeout() -> bool:
+            if handled[0]:
+                return False
+            handled[0] = True
+            if subscription:
+                self._bus.signal_unsubscribe(subscription[0])
+            self._fail(f"{method} timed out")
+            return False
 
         subscription.append(self._bus.signal_subscribe(BUS_NAME, REQUEST, "Response", request_path, None,
                                                        Gio.DBusSignalFlags.NONE, handler))
         full = GLib.Variant(signature, (*arguments, options))
         try:
-            self._bus.call(BUS_NAME, OBJECT_PATH, interface, method, full, None,
-                           Gio.DBusCallFlags.NONE, 30000, None, None)
+            self._bus.call_sync(BUS_NAME, OBJECT_PATH, interface, method, full, None,
+                                Gio.DBusCallFlags.NONE, 30000, None)
         except GLib.Error as exc:
+            handled[0] = True  # no timeout afterwards: it would unsubscribe and fail twice
+            self._bus.signal_unsubscribe(subscription[0])
             self._fail(f"{method} failed: {exc.message}")
+            return
+
+        timeout_id.append(GLib.timeout_add_seconds(_RESPONSE_TIMEOUT_S, on_timeout))
 
     def _load_token(self) -> str:
         try:

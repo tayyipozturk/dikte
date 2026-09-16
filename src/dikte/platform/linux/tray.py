@@ -13,7 +13,7 @@ try:
 except ValueError:  # older systems
     gi.require_version("AppIndicator3", "0.1")
     from gi.repository import AppIndicator3 as AppIndicator
-from gi.repository import Gtk
+from gi.repository import GLib, Gtk
 
 from ...controller import Status
 from ...ui import menu_model
@@ -23,12 +23,31 @@ log = logging.getLogger(__name__)
 ICONS = {
     "starting": "content-loading-symbolic",
     "idle": "audio-input-microphone-symbolic",
-    "listening": "audio-input-microphone-high-symbolic",
+    "listening": "microphone-sensitivity-high-symbolic",
     "recording": "media-record-symbolic",
     "transcribing": "content-loading-symbolic",
     "paused": "microphone-sensitivity-muted-symbolic",
     "error": "dialog-warning-symbolic",
 }
+
+
+def _menu_signature(items) -> tuple:  # noqa: ANN001 - list[menu_model.Item]
+    """Compute a cheap signature of the rendered menu structure.
+
+    Returns a recursive tuple of (title, checked, separator, sub-signature)
+    for every item, allowing comparison to detect if the menu needs rebuilding.
+    """
+    sig = []
+    for entry in items:
+        if entry.separator:
+            sig.append((None, None, True, ()))
+        elif entry.checked is not None:
+            sub_sig = _menu_signature(list(entry.submenu)) if entry.submenu else ()
+            sig.append((entry.title, entry.checked, False, sub_sig))
+        else:
+            sub_sig = _menu_signature(list(entry.submenu)) if entry.submenu else ()
+            sig.append((entry.title, None, False, sub_sig))
+    return tuple(sig)
 
 
 class LinuxTray:
@@ -38,6 +57,7 @@ class LinuxTray:
         self._status = Status()
         self._history: tuple[str, ...] = ()
         self._menu: Gtk.Menu | None = None
+        self._menu_signature: tuple = ()
         self._indicator = AppIndicator.Indicator.new(
             "dikte", ICONS["idle"], AppIndicator.IndicatorCategory.APPLICATION_STATUS
         )
@@ -69,6 +89,10 @@ class LinuxTray:
             supports_hud=self._platform.supports_hud,
             paste_shortcuts=self._platform.paste_shortcut_choice,
         )
+        sig = _menu_signature(items)
+        if sig == self._menu_signature:
+            return  # nothing visible changed, skip rebuild
+        self._menu_signature = sig
         menu = self._render(items)
         menu.show_all()
         self._indicator.set_menu(menu)
@@ -97,7 +121,11 @@ class LinuxTray:
         return menu
 
     def _activated(self, _widget, action) -> None:  # noqa: ANN001
-        try:
-            action()
-        except Exception:  # noqa: BLE001 - a menu action must never crash the app
-            log.exception("Menu action failed")
+        def invoke_action() -> bool:
+            try:
+                action()
+            except Exception:  # noqa: BLE001 - a menu action must never crash the app
+                log.exception("Menu action failed")
+            return False
+
+        GLib.idle_add(invoke_action)

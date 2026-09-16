@@ -49,7 +49,8 @@ class LinuxPlatform:
         return self._hotkey
 
     def inserter(self) -> LinuxInserter:
-        if self.session.is_wayland:
+        # Start the portal on Wayland or when X11 tools are unavailable (e.g., systemd user services)
+        if self.session.is_wayland or not self.session.can_use_x11_tools:
             self._portal = self._start_portal()
         return LinuxInserter(self._runtime, self._portal, self.session, self._feedback.notify)
 

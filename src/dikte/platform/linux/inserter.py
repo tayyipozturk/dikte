@@ -74,15 +74,18 @@ class LinuxInserter:
         portal, combo = self._portal, PASTE_COMBOS.get(settings.paste_shortcut, PASTE_COMBOS["ctrl_v"])
 
         def run() -> None:
+            def press_enter() -> None:
+                portal.press_combo((RETURN,))
+
             if text:
                 if settings.insert_method == "type":
-                    portal.type_text(text)
+                    portal.type_text(text, after=press_enter if submit else None)
                 elif portal.set_clipboard(text):
-                    portal.paste_after_selection(combo)
+                    portal.paste_after_selection(combo, after=press_enter if submit else None)
                 else:
-                    portal.type_text(text)  # clipboard not granted
-            if submit:
-                portal.press_combo((RETURN,))
+                    portal.type_text(text, after=press_enter if submit else None)  # clipboard not granted
+            elif submit:
+                press_enter()
 
         self._runtime.call_on_main(run)
 

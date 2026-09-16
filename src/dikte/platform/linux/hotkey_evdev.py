@@ -121,12 +121,16 @@ class EvdevHotkey:
                 os.write(self._wake_write, b"x")
         if self._thread is not None:
             self._thread.join(timeout=2.0)
-        self._close_all()
-        for fd in (self._wake_read, self._wake_write):
-            if fd >= 0:
-                with contextlib.suppress(OSError):
-                    os.close(fd)
-        self._wake_read = self._wake_write = -1
+        # only close if the thread has actually finished; if it times out, it may still be in select()
+        if self._thread is None or not self._thread.is_alive():
+            self._close_all()
+            for fd in (self._wake_read, self._wake_write):
+                if fd >= 0:
+                    with contextlib.suppress(OSError):
+                        os.close(fd)
+            self._wake_read = self._wake_write = -1
+        else:
+            log.warning("Hotkey reader thread did not finish within timeout; descriptors left open")
         if self._down:
             self._down = False
             self._emit("up")
